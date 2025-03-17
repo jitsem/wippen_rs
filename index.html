@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en-US">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Wippen</title>
+    <style>
+
+    </style>
+</head>
+
+<body>
+<div id="container">
+<div id="game-area"></div>
+</div>
+<script type="module">
+
+    import init, {Deck} from "./pkg/wippen_wasm.js";
+    init().then(() => {
+        let deck = new Deck();
+        while (true){
+            let card = deck.take_card()
+            if(card === undefined)
+                break;
+            else{
+                add_card(card.card_number["0"], card.suit)
+            }
+        }
+        console.log("Book empty")
+    });
+
+    function add_card(card, suit) {
+        console.log(card);
+        console.log(suit);
+
+        let game_area = document.getElementById("game-area");
+
+        let suitSymbols = {
+            "3": "♥",
+            "2": "♦",
+            "1": "♣",
+            "0": "♠"
+        };
+
+        let cardElement = document.createElement("div");
+        cardElement.className = "card";
+        cardElement.innerHTML = `${card} ${suitSymbols[suit] || suit}`;
+        game_area.appendChild(cardElement);
+    }
+
+
+</script>
+</body>
+
+</html>
