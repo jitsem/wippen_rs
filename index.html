@@ -7,7 +7,18 @@
 
     <title>Wippen</title>
     <style>
-
+        #game-area {
+            background: aliceblue;
+            display: flex;
+            flex: 1;
+        }
+        .card {
+            margin: 2px;
+            border: 2px gray;
+            box-shadow: black 1px 1px;
+            background: white;
+            aspect-ratio: 5/7;
+        }
     </style>
 </head>
 
@@ -18,8 +29,10 @@
 <script type="module">
 
     import init, {Deck} from "./pkg/wippen_wasm.js";
+    const seed = Date.now();
     init().then(() => {
         let deck = new Deck();
+        deck.shuffle(BigInt(seed));
         while (true){
             let card = deck.take_card()
             if(card === undefined)
@@ -38,15 +51,23 @@
         let game_area = document.getElementById("game-area");
 
         let suitSymbols = {
-            "3": "♥",
-            "2": "♦",
-            "1": "♣",
-            "0": "♠"
+            "3": {symbol:"♥", color: "red"},
+            "2": {symbol:"♦", color: "red"},
+            "1": {symbol:"♣", color: "black"},
+            "0": {symbol:"♠", color: "black"},
         };
+
+        let faceSymbols = {
+            "13": "K",
+            "12": "D",
+            "11": "J",
+            "1" : "A"
+        }
 
         let cardElement = document.createElement("div");
         cardElement.className = "card";
-        cardElement.innerHTML = `${card} ${suitSymbols[suit] || suit}`;
+        cardElement.innerHTML = `${faceSymbols[card] || card} ${suitSymbols[suit].symbol || suit}`;
+        cardElement.style.color = suitSymbols[suit].color || "black";
         game_area.appendChild(cardElement);
     }
 
