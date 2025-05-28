@@ -1,6 +1,6 @@
 # Wippen_rs
 
-A rust implementation of the Belgian game "Wippen". A rust 'engine" is compiled to wasm, and run in a simple html/js frontend.
+A rust implementation of the Belgian game "Wippen". A rust 'engine' is compiled to wasm, and run in a simple html/js frontend.
 
 ## Todo
 - Have an actual strategy for engine controlled player
