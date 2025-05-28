@@ -11,6 +11,7 @@
             background: aliceblue;
             display: flex;
             flex: 1;
+            height: 100px;
         }
         .card {
             margin: 2px;
@@ -28,23 +29,26 @@
 </div>
 <script type="module">
 
-    import init, {Deck} from "./pkg/wippen_wasm.js";
+    import init, {FreshGame, Card} from "./pkg/wippen_wasm.js";
     const seed = Date.now();
     init().then(() => {
-        let deck = new Deck();
-        deck.shuffle(BigInt(seed));
-        while (true){
-            let card = deck.take_card()
-            if(card === undefined)
-                break;
-            else{
-                add_card(card.card_number["0"], card.suit)
-            }
-        }
-        console.log("Book empty")
+        let game = new FreshGame(BigInt(seed));
+        let started = game.start();
+        started.get_player_1_hand().forEach(
+            add_card
+        )
+        started.get_middle().forEach(
+            add_card
+        )
+        started.get_player_2_hand().forEach(
+            add_card
+        )
+        console.log("Waiting for action")
     });
 
-    function add_card(card, suit) {
+    function add_card(card) {
+        let number = card.card_number["0"];
+        let suit = card.suit;
         console.log(card);
         console.log(suit);
 
@@ -66,7 +70,7 @@
 
         let cardElement = document.createElement("div");
         cardElement.className = "card";
-        cardElement.innerHTML = `${faceSymbols[card] || card} ${suitSymbols[suit].symbol || suit}`;
+        cardElement.innerHTML = `${faceSymbols[number] || number} ${suitSymbols[suit].symbol || suit}`;
         cardElement.style.color = suitSymbols[suit].color || "black";
         game_area.appendChild(cardElement);
     }

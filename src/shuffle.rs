@@ -41,13 +41,13 @@ mod tests {
 
     #[test]
     fn shuffle_10_vec() {
-        let mut input = vec![1,2,3,4,5,6,7,8,9,10];
+        let mut input = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
         input.shuffle(123, 1000);
         assert_eq!(input.len(), 10)
     }
     #[test]
     fn shuffle_9_vec() {
-        let mut input = vec![1,2,3,4,5,6,7,8,9];
+        let mut input = vec![1, 2, 3, 4, 5, 6, 7, 8, 9];
         input.shuffle(123, 1000);
         assert_eq!(input.len(), 9)
     }
