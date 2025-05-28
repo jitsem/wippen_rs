@@ -2,17 +2,23 @@
 <html lang="en-US">
 
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
     <title>Wippen</title>
     <style>
-        #game-area {
-            background: aliceblue;
+        .card-area {
+
+            background: repeating-linear-gradient(
+                    20deg,
+                    #f3a35c,
+                    #f3a35c 2px,
+                    sandybrown 2px,
+                    sandybrown 4px);
             display: flex;
-            flex: 1;
             height: 100px;
         }
+
         .card {
             margin: 2px;
             border: 2px gray;
@@ -20,60 +26,154 @@
             background: white;
             aspect-ratio: 5/7;
         }
+
+        .card.interactable:hover {
+            scale: 1.1;
+        }
+
+        .card.face-down {
+            background: repeating-linear-gradient(
+                    45deg,
+                    navy,
+                    navy 5px,
+                    royalblue 5px,
+                    royalblue 10px
+            );
+            color: transparent;
+            box-shadow: none;
+            border: 2px solid navy;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .card.face-down * {
+            visibility: hidden;
+        }
+
+        .card.stacked {
+            box-shadow:
+                    2px 2px 0 gray,
+                    4px 4px 0 darkgray,
+                    6px 6px 0 lightgray;
+            margin-bottom: 6px;
+        }
+
+
+        .row {
+            display: flex;
+            flex: 1;
+            flex-flow: column wrap;
+            justify-content: space-between;
+            height: 100px;
+            margin-bottom:  10px;
+        }
+
+        body {
+            background: repeating-linear-gradient(
+                    20deg,
+                    #8b4b13,
+                    #8b4b13 2px,
+                    saddlebrown 2px,
+                    saddlebrown 4px
+            );
+        }
     </style>
 </head>
 
 <body>
 <div id="container">
-<div id="game-area"></div>
+    <div class="row">
+        <div class="card-area" id="player2-area"></div>
+        <div class="card-area" id="score2-area"></div>
+    </div>
+    <div class="row">
+        <div class="card-area" id="middle-area"></div>
+        <div class="card-area" id="deck-area"></div>
+    </div>
+    <div class="row">
+        <div class="card-area" id="player1-area"></div>
+        <div class="card-area" id="score1-area"></div>
+    </div>
 </div>
 <script type="module">
 
     import init, {FreshGame, Card} from "./pkg/wippen_wasm.js";
-    const seed = Date.now();
-    init().then(() => {
-        let game = new FreshGame(BigInt(seed));
-        let started = game.start();
-        started.get_player_1_hand().forEach(
-            add_card
-        )
-        started.get_middle().forEach(
-            add_card
-        )
-        started.get_player_2_hand().forEach(
-            add_card
-        )
-        console.log("Waiting for action")
-    });
 
-    function add_card(card) {
-        let number = card.card_number["0"];
-        let suit = card.suit;
+    const seed = Date.now();
+
+    function add_face_down_cards(player1Score, gameArea) {
+        switch (player1Score) {
+            case 0:
+                //TODO draw empty score field?
+                break;
+            case 1:
+                add_card(null, gameArea, true, false);
+                break;
+            default:
+                add_card(null,gameArea, true, true);
+
+        }
+    }
+
+    function add_card(card, gameArea, isFaceDown, isStacked, isInteractable) {
+        let number = card?.card_number["0"] ?? "0";
+        let suit = card?.suit ?? "/";
         console.log(card);
         console.log(suit);
 
-        let game_area = document.getElementById("game-area");
-
         let suitSymbols = {
-            "3": {symbol:"♥", color: "red"},
-            "2": {symbol:"♦", color: "red"},
-            "1": {symbol:"♣", color: "black"},
-            "0": {symbol:"♠", color: "black"},
+            "3": {symbol: "♥", color: "red"},
+            "2": {symbol: "♦", color: "red"},
+            "1": {symbol: "♣", color: "black"},
+            "0": {symbol: "♠", color: "black"},
         };
 
         let faceSymbols = {
             "13": "K",
             "12": "D",
             "11": "J",
-            "1" : "A"
+            "1": "A"
         }
 
         let cardElement = document.createElement("div");
         cardElement.className = "card";
-        cardElement.innerHTML = `${faceSymbols[number] || number} ${suitSymbols[suit].symbol || suit}`;
-        cardElement.style.color = suitSymbols[suit].color || "black";
-        game_area.appendChild(cardElement);
+        if (isFaceDown) cardElement.className += " face-down"
+        if (isStacked) cardElement.className += " stacked"
+        if (isInteractable) cardElement.className += " interactable"
+        cardElement.innerHTML = `<span>${faceSymbols[number] ?? number} ${suitSymbols[suit]?.symbol ?? suit}</span>`;
+        cardElement.style.color = suitSymbols[suit]?.color || "black";
+        gameArea.appendChild(cardElement);
     }
+
+
+    init().then(() => {
+        let game = new FreshGame(BigInt(seed));
+        let activeGame = game.start();
+        activeGame.get_player_1_hand().forEach(
+            function (card) {
+                add_card(card, document.getElementById("player1-area"), false, false, true)
+            }
+        )
+        activeGame.get_middle().forEach(
+            function (card) {
+                add_card(card, document.getElementById("middle-area"), false)
+            }
+        )
+        activeGame.get_player_2_hand().forEach(
+            function (card) {
+                add_card(card, document.getElementById("player2-area"), true)
+            }
+        )
+        let player1Score = activeGame.get_player_1_score().length;
+        add_face_down_cards(player1Score,document.getElementById("score1-area") );
+
+        let player2Score = activeGame.get_player_2_score().length;
+        add_face_down_cards(player2Score,document.getElementById("score2-area") );
+
+        let deck_size = activeGame.get_deck().length;
+        add_face_down_cards(deck_size,document.getElementById("deck-area") );
+        console.log("Waiting for action")
+    });
 
 
 </script>
