@@ -1,15 +1,7 @@
 mod shuffle;
+use crate::Suit::Spades;
 use shuffle::Shuffle;
 use wasm_bindgen::prelude::*;
-
-//Idea would be to have the interface to JS be an collection of "Events"
-//Each event will be an atomic change on the gameboard.
-// Eg. EnemyTook (cardnr, cardvalue, Vec<cards>)
-// Eg. PlayerDropped(cardnr, cardValue)
-// Eg. PlayerDealt()
-// Eg. LastCall()
-// Event will also contain the updated game state.
-//
 
 /// The engine is the main entrypoint. Representing a game that is "set up" but not started yet.
 #[wasm_bindgen]
@@ -17,7 +9,7 @@ struct FreshGame {
     seed: u64,
 }
 
-/// Represents a game that is in progress
+/// Represents a game in progress
 #[derive(Debug, Clone)]
 #[wasm_bindgen]
 struct InProgressGame {
@@ -27,17 +19,20 @@ struct InProgressGame {
 
 #[wasm_bindgen]
 impl InProgressGame {
+    pub fn get_events(&self) -> Vec<GameEvent> {
+        self.events.clone()
+    }
     pub fn get_player_1_hand(&self) -> Vec<Card> {
         self.game_state.player1.hand.cards.clone()
     }
-    pub fn get_player_1_score(&self) -> Vec<Card> {
+    pub fn get_player_1_score_pile(&self) -> Vec<Card> {
         self.game_state.player1.score_pile.cards.clone()
     }
     pub fn get_player_2_hand(&self) -> Vec<Card> {
         self.game_state.player2.hand.cards.clone()
     }
 
-    pub fn get_player_2_score(&self) -> Vec<Card> {
+    pub fn get_player_2_score_pile(&self) -> Vec<Card> {
         self.game_state.player2.score_pile.cards.clone()
     }
 
@@ -48,39 +43,100 @@ impl InProgressGame {
         self.game_state.deck.cards.clone()
     }
 
+    pub fn get_player_1_score(&self) -> usize {
+        self.game_state.player1.score_pile.count_score() + self.game_state.player1.wip_gains
+    }
+
+    pub fn get_player_2_score(&self) -> usize {
+        self.game_state.player2.score_pile.count_score() + self.game_state.player2.wip_gains
+    }
     /// Play a card from the player hand (if possible). Ideally, this would he more enum-y,
-    /// but the wasm_bindgen does not support valued enums. So the hacky way is to consume self,
+    /// but the wasm_bindgen does not support valued enums. So the hacky way is to consume self
     ///and return a new instance.
-    pub fn play_card(mut self, card: Card) -> Option<InProgressGame>{
+    pub fn play_card(mut self, card: Card) -> Option<InProgressGame> {
         match self.game_state.player1.hand.take_same_card(&card) {
+            None => None,
             Some(player1_card) => {
-                if let Some(matching_middle_card) = self.game_state.middle.take_same_number(&card) {
-                    self.game_state.player1.score_pile.push_card(player1_card);
-                    self.game_state.player1.score_pile.push_card(matching_middle_card);
+                let scored = Self::play_and_score(
+                    &mut self.game_state.middle,
+                    &mut self.game_state.player1.score_pile,
+                    player1_card,
+                );
+                if scored {
+                    self.events.push(GameEvent::Player1Scored)
                 }
-                else {
-                    self.game_state.middle.push_card(player1_card);
+                if self.game_state.middle.is_empty() {
+                    self.game_state.player1.wip_gains += 1;
+                    self.events.push(GameEvent::Player1Wipped);
                 }
-                //Todo have a strategy here
-                if let Some(player2_card) = self.game_state.player2.hand.cards.pop() {
-                    self.game_state.middle.push_card(player2_card);
+                self.events.push(GameEvent::Player1Played);
+
+                //TODO actually implement a strategy
+                let player2_card = self
+                    .game_state
+                    .player2
+                    .hand
+                    .cards
+                    .pop()
+                    .expect("Player 2 has no card. This should not happen");
+                let scored = Self::play_and_score(
+                    &mut self.game_state.middle,
+                    &mut self.game_state.player2.score_pile,
+                    player2_card,
+                );
+                if scored {
+                    self.events.push(GameEvent::Player2Scored)
                 }
-                else {
-                    panic!("Player 2 has no card. This should not happen");
+                if self.game_state.middle.is_empty() {
+                    self.game_state.player2.wip_gains += 1;
+                    self.events.push(GameEvent::Player2Wipped);
                 }
+                self.events.push(GameEvent::Player2Played);
+
                 if self.game_state.player1.hand.is_empty() {
-                    if self.game_state.can_deal()
-                    {
+                    self.events.push(GameEvent::RoundOver);
+                    if self.game_state.can_deal() {
                         self.game_state.deal();
+                        self.events.push(GameEvent::Dealt);
                     } else {
-                        //We are done
-                        //TODO figure out scoring
+                        //TODO find a way to transition to a Finished game. For now, our JS will use
+                        //the events to check for game over
+                        let last_scored = self
+                            .events
+                            .iter()
+                            .filter(|e| {
+                                **e == GameEvent::Player1Scored || **e == GameEvent::Player2Scored
+                            })
+                            .next_back()
+                            .expect("Expected at least one score at the end of the game");
+                        let remainder_score_pile = match last_scored {
+                            GameEvent::Player1Scored => &mut self.game_state.player1.score_pile,
+                            GameEvent::Player2Scored => &mut self.game_state.player1.score_pile,
+                            _ => panic!("We filter on scored events, yet also got other stuff"),
+                        };
+                        while let Some(card) = self.game_state.middle.take_top_card() {
+                            remainder_score_pile.push_card(card);
+                        }
+                        self.events.push(GameEvent::GameOver);
                     }
                 }
                 Some(self)
             }
-            None => None
         }
+    }
+
+    fn play_and_score(middle: &mut Deck, score_pile: &mut Deck, card: Card) -> bool {
+        let mut scored = false;
+        while let Some(matching) = middle.take_same_number(&card) {
+            scored = true;
+            score_pile.push_card(matching);
+        }
+        if scored {
+            score_pile.push_card(card)
+        } else {
+            middle.push_card(card)
+        }
+        scored
     }
 }
 
@@ -94,33 +150,28 @@ struct GameState {
 }
 
 impl GameState {
-
     fn can_deal(&self) -> bool {
         self.deck.cards.len() >= 4
     }
     fn deal(&mut self) {
         for _ in 0..2 {
             self.player1.hand.push_card(
-                self
-                    .deck
+                self.deck
                     .take_top_card()
                     .expect("We expect a new deck to always yield cards"),
             );
             self.player1.hand.push_card(
-                self
-                    .deck
+                self.deck
                     .take_top_card()
                     .expect("We expect a new deck to always yield cards"),
             );
             self.player2.hand.push_card(
-                self
-                    .deck
+                self.deck
                     .take_top_card()
                     .expect("We expect a new deck to always yield cards"),
             );
             self.player2.hand.push_card(
-                self
-                    .deck
+                self.deck
                     .take_top_card()
                     .expect("We expect a new deck to always yield cards"),
             );
@@ -132,16 +183,23 @@ impl GameState {
 struct Player {
     hand: Deck,
     score_pile: Deck,
+    wip_gains: usize,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[wasm_bindgen]
 pub enum GameEvent {
     Started,
     Shuffled,
-    DealtToPlayer1,
-    DealtToMiddle,
-    DealtToPlayer2,
+    Dealt,
+    Player1Wipped,
+    Player1Played,
+    Player1Scored,
+    Player2Wipped,
+    Player2Played,
+    Player2Scored,
+    RoundOver,
+    GameOver,
 }
 
 impl Player {
@@ -149,6 +207,7 @@ impl Player {
         Player {
             hand: Deck::empty(),
             score_pile: Deck::empty(),
+            wip_gains: 0,
         }
     }
 }
@@ -210,7 +269,7 @@ impl FreshGame {
                     .expect("We expect a new deck to always yield cards"),
             );
         }
-
+        events.push(GameEvent::Dealt);
         InProgressGame { game_state, events }
     }
 }
@@ -281,11 +340,14 @@ impl Deck {
 
     pub fn take_same_card(&mut self, card: &Card) -> Option<Card> {
         let index = self.cards.iter().position(|c| c == card)?;
-        Some (self.cards.swap_remove(index))
+        Some(self.cards.swap_remove(index))
     }
     pub fn take_same_number(&mut self, card: &Card) -> Option<Card> {
-        let index = self.cards.iter().position(|c| c.card_number == card.card_number)?;
-        Some (self.cards.swap_remove(index))
+        let index = self
+            .cards
+            .iter()
+            .position(|c| c.card_number == card.card_number)?;
+        Some(self.cards.swap_remove(index))
     }
 
     pub fn push_card(&mut self, card: Card) {
@@ -295,7 +357,34 @@ impl Deck {
     pub fn is_empty(&self) -> bool {
         self.cards.is_empty()
     }
+    pub fn count_score(&self) -> usize {
+        let mut count = 0;
+        //Aces are worth 1 point
+        count += self.cards.iter().filter(|c| c.card_number.0 == 1).count();
+        //schoppen 2
+        count += self
+            .cards
+            .iter()
+            .filter(|c| c.card_number.0 == 2 && c.suit == Suit::Spades)
+            .count();
+        //Koeken 10
+        count += self
+            .cards
+            .iter()
+            .filter(|c| c.card_number.0 == 10 && c.suit == Suit::Diamonds)
+            .count()
+            * 2;
+        //Most cards
+        if self.cards.len() > 26 {
+            count += 2
+        };
+        //Most schoppens
+        if self.cards.iter().filter(|c| c.suit == Spades).count() >= 7 {
+            count += 2
+        };
 
+        count
+    }
 }
 
 #[cfg(test)]

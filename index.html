@@ -107,7 +107,7 @@
 </div>
 <script type="module">
 
-    import init, {FreshGame, Card} from "./pkg/wippen_wasm.js";
+    import init, {FreshGame, GameEvent} from "./pkg/wippen_wasm.js";
 
     const seed = Date.now();
     let activeGame = undefined;
@@ -160,8 +160,6 @@
         gameArea.appendChild(cardElement);
     }
     function playCard (card) {
-        let number = card?.card_number["0"] ?? "0";
-        let suit = card?.suit ?? "/";
         let playResult = activeGame.play_card(card);
         if (playResult == null) {
             console.log("The played card was invalid")
@@ -169,8 +167,11 @@
         else
         {
           activeGame = playResult;
-          //TODO animate new events
           renderGame(activeGame);
+          if (activeGame.get_events().some((ev) => ev === GameEvent.GameOver))
+          {
+                alert("Game over! Player 1 score: " + activeGame.get_player_1_score() + "! Player 2 score: " + activeGame.get_player_2_score() + "!")
+          }
         }
     }
 
@@ -199,10 +200,10 @@
                 add_card(card, document.getElementById("player2-area"), true)
             }
         )
-        let player1Score = activeGame.get_player_1_score().length;
+        let player1Score = activeGame.get_player_1_score_pile().length;
         add_face_down_cards(player1Score, document.getElementById("score1-area"));
 
-        let player2Score = activeGame.get_player_2_score().length;
+        let player2Score = activeGame.get_player_2_score_pile().length;
         add_face_down_cards(player2Score, document.getElementById("score2-area"));
 
         let deck_size = activeGame.get_deck().length;
